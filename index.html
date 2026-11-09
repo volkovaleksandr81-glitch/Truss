@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Как датчики наклона «чувствуют» прогиб фермы</title>
+<script>document.documentElement.classList.add('js');</script>
+<style>
+  :root{
+    --bg:#f4f6fa; --card:#ffffff; --ink:#1f2a3d; --muted:#5d6b82; --line:#dfe5ee;
+    --accent:#2f6fde; --steel:#4a6283; --steel2:#6f86a6; --sensor:#2b3a55;
+    --ok:#2e9e5b; --warn:#e3a21a; --bad:#d9443a; --hl:#8cc63f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
+  .wrap{max-width:1400px;margin:0 auto;padding:20px 18px 40px}
+  h1{font-size:26px;margin:0 0 6px}
+  .lead{color:var(--muted);margin:0 0 16px;max-width:980px}
+  .grid{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:18px;align-items:start}
+  @media (max-width:1100px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 2px 10px rgba(31,42,61,.05)}
+  .stage{padding:10px}
+  svg#scene{width:100%;height:auto;display:block;border-radius:12px;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+  .h-handle{touch-action:none}
+  .mob-only{display:none}
+  html:not(.js) .js-only{display:none!important}
+  html.js .nojs{display:none!important}
+  .nojs svg{width:100%;height:auto;display:block;border-radius:12px}
+  .nojs-msg{margin:10px 4px 6px;padding:10px 12px;border-radius:10px;background:#fff7e0;border:1px solid #f1d58a;font-size:15px}
+  .mob-i{display:none}
+  .mob-i-block{display:none}
+  .hint{font-size:13px;color:var(--muted);padding:6px 8px 2px;display:flex;flex-wrap:wrap;gap:6px 18px}
+  .hint b{color:var(--ink)}
+  .controls{padding:12px 14px;display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;border-top:1px solid var(--line);margin-top:8px}
+  .ctl{display:flex;align-items:center;gap:8px;font-size:14px}
+  .ctl input[type=range]{width:170px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{border:0;background:#fff;padding:7px 12px;font-size:14px;cursor:pointer;color:var(--ink)}
+  .seg button.on{background:var(--accent);color:#fff}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:7px 11px;font-size:13.5px;cursor:pointer;color:var(--ink)}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 14px}
+  select,input[type=number]{font:inherit;font-size:14px;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  input[type=number]{width:84px}
+  details.params{padding:0 14px 14px}
+  details.params summary{cursor:pointer;font-size:14px;color:var(--accent);margin-bottom:8px}
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px 18px;font-size:14px}
+  .pgrid label{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .note{font-size:12.5px;color:var(--muted)}
+  .panel{padding:16px 18px}
+  .panel h2{font-size:17px;margin:2px 0 10px}
+  .panel h3{font-size:15px;margin:16px 0 6px}
+  .readings{width:100%;border-collapse:collapse;font-size:14px}
+  .readings td{padding:5px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
+  .readings td.v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tag{display:inline-block;min-width:30px;text-align:center;font-weight:700;color:#fff;background:var(--sensor);border-radius:6px;padding:1px 6px;font-size:12.5px}
+  .f{font-family:"Cambria Math","STIX Two Math","Times New Roman",serif;font-size:16px}
+  .eq{background:#f7f9fc;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0;font-size:14.5px;overflow-x:auto}
+  .eq .row{margin:3px 0;white-space:nowrap}
+  .frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 2px;line-height:1.15}
+  .frac>span:first-child{border-bottom:1px solid currentColor;padding:0 3px}
+  .frac>span:last-child{padding:0 3px}
+  .num{font-variant-numeric:tabular-nums;font-weight:600}
+  .check{color:var(--ok);font-weight:600}
+  .muted{color:var(--muted)}
+  .callout{border-radius:10px;padding:8px 10px;font-size:13.5px;margin:8px 0;background:#fff7e0;border:1px solid #f1d58a}
+  .callout.blue{background:#eaf2ff;border-color:#bcd3fb}
+  .bar{position:relative;height:16px;border-radius:8px;background:#edf1f6;overflow:hidden;margin:6px 0 4px}
+  .bar>i{position:absolute;left:0;top:0;bottom:0;border-radius:8px;transition:width .1s}
+  .bar>b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+  details.more{margin-top:10px;font-size:14px}
+  details.more summary{cursor:pointer;color:var(--accent);margin:6px 0}
+  details.more p,details.more li{margin:6px 0}
+  .src{font-size:12px;color:var(--muted);margin-top:14px}
+  /* svg */
+  .h-handle{cursor:grab}
+  .h-handle:active{cursor:grabbing}
+  .pulse{animation:pulse 1.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+  @keyframes pulse{0%,100%{opacity:.15;transform:scale(1)}50%{opacity:.55;transform:scale(1.35)}}
+  .flake{animation:fall linear infinite}
+  @media (max-width:719px){
+    .desk-only{display:none!important}
+    .mob-only{display:block}
+    .mob-i{display:inline}
+    .mob-i-block{display:block}
+    .wrap{padding:12px 10px 28px}
+    h1{font-size:21px;line-height:1.25}
+    .lead{font-size:15px;margin-bottom:12px}
+    .grid{gap:12px}
+    .stage{padding:6px}
+    .controls{padding:10px 8px;gap:10px}
+    .ctl{width:100%;justify-content:space-between}
+    .ctl input[type=range]{flex:1;width:auto}
+    .seg{width:100%}
+    .seg button{flex:1;padding:10px 6px;font-size:14px}
+    .btns{padding:0 8px 10px}
+    .btn{flex:1 1 45%;padding:10px 8px;font-size:14px}
+    .panel{padding:14px}
+    .eq{font-size:15px}
+  }
+  @keyframes fall{from{transform:translateY(-40px)}to{transform:translateY(var(--d,160px))}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Как датчики наклона «чувствуют» прогиб фермы</h1>
+  <p class="lead mob-only">Датчик наклона измеряет только угол. Двух датчиков на концах фермы хватает, чтобы узнать <b>прогиб от снега</b> и <b>разность осадок колонн</b>. Тяните за круглые ручки.</p>
+  <p class="lead desk-only">Датчик наклона (инклинометр) измеряет только одно: на какой угол он повернулся. На каждый конец фермы ставится по датчику, и из двух углов можно узнать и <b>прогиб фермы от снега</b>, и <b>неравномерную осадку колонн</b>. Тяните мышкой или пальцем за круглые ручки и смотрите, как меняются показания.</p>
+
+  <div class="grid">
+    <div class="card stage">
+      <svg id="scene" class="js-only" viewBox="0 0 1000 640" aria-label="Интерактивная модель фермы на двух колоннах"></svg>
+      <div class="nojs">
+        <div class="desk-only"><svg viewBox="0 0 1000 640" aria-label="Интерактивная модель фермы на двух колоннах"><defs>
+    <linearGradient id="sd_sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9ecff"></stop><stop offset="1" stop-color="#f3f9ff"></stop></linearGradient>
+    <linearGradient id="sd_soil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9a77c"></stop><stop offset="1" stop-color="#a98559"></stop></linearGradient>
+    <linearGradient id="sd_col" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5b7598"></stop><stop offset=".5" stop-color="#7d97b8"></stop><stop offset="1" stop-color="#4f6789"></stop></linearGradient>
+    <linearGradient id="sd_conc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c7cbd1"></stop><stop offset="1" stop-color="#a9afb8"></stop></linearGradient>
+    <pattern id="sd_hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#9a7a50" stroke-width="2" opacity=".35"></line></pattern>
+    <filter id="sd_sh" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#1f2a3d" flood-opacity=".18"></feDropShadow></filter>
+  </defs><rect x="0" y="0" width="1000" height="640" fill="url(#sd_sky)"></rect><g fill="#fff" opacity=".9" transform="scale(1,1)"><ellipse cx="120" cy="70" rx="46" ry="16"></ellipse><ellipse cx="150" cy="58" rx="30" ry="16"></ellipse><ellipse cx="860" cy="92" rx="52" ry="15"></ellipse><ellipse cx="890" cy="80" rx="28" ry="14"></ellipse></g><rect x="0" y="478" width="1000" height="162" fill="url(#sd_soil)"></rect><rect x="0" y="478" width="1000" height="162" fill="url(#sd_hatch)"></rect><rect x="0" y="474" width="1000" height="8" rx="4" fill="#7cc36b"></rect><rect x="211" y="246" width="18" height="224" fill="none" stroke="#7d8aa0" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"></rect><rect x="771" y="246" width="18" height="224" fill="none" stroke="#7d8aa0" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"></rect><rect x="181" y="515.9555555555555" width="78" height="34" rx="5" fill="url(#sd_conc)" stroke="#8b929c" stroke-width="1.2"></rect><rect x="203" y="479.9555555555556" width="34" height="38" rx="3" fill="url(#sd_conc)" stroke="#8b929c" stroke-width="1.2"></rect><polygon points="211.0,480.0 229.0,480.0 229.0,256.0 211.0,256.0" fill="url(#sd_col)" stroke="#3b5272" stroke-width="1.4" stroke-linejoin="round"></polygon><line x1="220" y1="475.9555555555556" x2="220" y2="259.9555555555556" stroke="#3b5272" stroke-width="1" opacity="0.5"></line><rect x="205" y="474.9555555555556" width="30" height="6" rx="2" fill="#3b5272"></rect><rect x="204" y="249.95555555555558" width="32" height="7" rx="2" fill="#3b5272"></rect><rect x="741" y="549.5555555555555" width="78" height="34" rx="5" fill="url(#sd_conc)" stroke="#8b929c" stroke-width="1.2"></rect><rect x="763" y="513.5555555555555" width="34" height="38" rx="3" fill="url(#sd_conc)" stroke="#8b929c" stroke-width="1.2"></rect><polygon points="771.0,513.6 789.0,513.6 789.0,289.6 771.0,289.6" fill="url(#sd_col)" stroke="#3b5272" stroke-width="1.4" stroke-linejoin="round"></polygon><line x1="780" y1="509.55555555555554" x2="780" y2="293.55555555555554" stroke="#3b5272" stroke-width="1" opacity="0.5"></line><rect x="765" y="508.55555555555554" width="30" height="6" rx="2" fill="#3b5272"></rect><rect x="764" y="283.55555555555554" width="32" height="7" rx="2" fill="#3b5272"></rect><rect x="220" y="184" width="560" height="56" fill="none" stroke="#7d8aa0" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"></rect><path d="M 202.44444444444446,187.30008889547943 Q 198.44444444444446,167.6 212.44444444444446,163.0 L 220.0,165.6 L 313.3,181.6 L 406.7,194.6 L 500.0,202.8 L 593.3,205.8 L 686.7,204.0 L 780.0,199.2 L 787.5555555555555,198.4 Q 801.5555555555555,203.1 797.5555555555555,222.7667555621461 L 780.0,222.6 L 686.7,227.3 L 593.3,229.1 L 500.0,226.2 L 406.7,217.9 L 313.3,204.9 L 220.0,189.0 Z" fill="#ffffff" stroke="#b9d4ea" stroke-width="1.5" stroke-linejoin="round" filter="url(#sd_sh)"></path><g opacity="0.85"><circle class="flake" cx="314.0" cy="10" r="2.8" fill="#fff" style="--d:156px;animation-duration:5.1s;animation-delay:-0.74s"></circle><circle class="flake" cx="451.0" cy="10" r="1.6" fill="#fff" style="--d:164px;animation-duration:6.4s;animation-delay:-1.1099999999999999s"></circle><circle class="flake" cx="588.0" cy="10" r="2.2" fill="#fff" style="--d:172px;animation-duration:3.7s;animation-delay:-1.48s"></circle><circle class="flake" cx="725.0" cy="10" r="2.8" fill="#fff" style="--d:180px;animation-duration:5s;animation-delay:-1.85s"></circle><circle class="flake" cx="216.0" cy="10" r="2.8" fill="#fff" style="--d:150px;animation-duration:4.9s;animation-delay:-2.96s"></circle><circle class="flake" cx="353.0" cy="10" r="1.6" fill="#fff" style="--d:158px;animation-duration:6.2s;animation-delay:-3.33s"></circle><circle class="flake" cx="490.0" cy="10" r="2.2" fill="#fff" style="--d:166px;animation-duration:3.5s;animation-delay:-3.7s"></circle><circle class="flake" cx="627.0" cy="10" r="2.8" fill="#fff" style="--d:174px;animation-duration:4.8s;animation-delay:-0.07000000000000028s"></circle><circle class="flake" cx="764.0" cy="10" r="1.6" fill="#fff" style="--d:183px;animation-duration:6.1s;animation-delay:-0.4399999999999995s"></circle><circle class="flake" cx="255.0" cy="10" r="1.6" fill="#fff" style="--d:152px;animation-duration:6s;animation-delay:-1.5499999999999998s"></circle><circle class="flake" cx="392.0" cy="10" r="2.2" fill="#fff" style="--d:160px;animation-duration:3.3s;animation-delay:-1.92s"></circle><circle class="flake" cx="529.0" cy="10" r="2.8" fill="#fff" style="--d:168px;animation-duration:4.6s;animation-delay:-2.29s"></circle><circle class="flake" cx="666.0" cy="10" r="1.6" fill="#fff" style="--d:177px;animation-duration:5.9s;animation-delay:-2.66s"></circle><circle class="flake" cx="803.0" cy="10" r="2.2" fill="#fff" style="--d:185px;animation-duration:3.2s;animation-delay:-3.0300000000000002s"></circle><circle class="flake" cx="294.0" cy="10" r="2.2" fill="#fff" style="--d:154px;animation-duration:3.1s;animation-delay:-0.14000000000000057s"></circle><circle class="flake" cx="431.0" cy="10" r="2.8" fill="#fff" style="--d:163px;animation-duration:4.4s;animation-delay:-0.5099999999999998s"></circle><circle class="flake" cx="568.0" cy="10" r="1.6" fill="#fff" style="--d:171px;animation-duration:5.7s;animation-delay:-0.879999999999999s"></circle><circle class="flake" cx="705.0" cy="10" r="2.2" fill="#fff" style="--d:179px;animation-duration:3s;animation-delay:-1.25s"></circle><circle class="flake" cx="196.0" cy="10" r="2.2" fill="#fff" style="--d:148px;animation-duration:2.9s;animation-delay:-2.3599999999999994s"></circle><circle class="flake" cx="333.0" cy="10" r="2.8" fill="#fff" style="--d:157px;animation-duration:4.2s;animation-delay:-2.7300000000000004s"></circle><circle class="flake" cx="470.0" cy="10" r="1.6" fill="#fff" style="--d:165px;animation-duration:5.5s;animation-delay:-3.0999999999999996s"></circle><circle class="flake" cx="607.0" cy="10" r="2.2" fill="#fff" style="--d:173px;animation-duration:2.8s;animation-delay:-3.4700000000000006s"></circle><circle class="flake" cx="744.0" cy="10" r="2.8" fill="#fff" style="--d:181px;animation-duration:4.1s;animation-delay:-3.84s"></circle></g><polyline points="204.4,186.3 220.0,189.0 313.3,204.9 406.7,217.9 500.0,226.2 593.3,229.1 686.7,227.3 780.0,222.6 795.6,221.8" fill="none" stroke="#c0533d" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline><g stroke="#e08a2e" stroke-width="4" stroke-linecap="round"><line x1="220" y1="249.95555555555555" x2="220" y2="193.95555555555555"></line><line x1="220" y1="193.95555555555555" x2="313.3333333333333" y2="265.88835551601215"></line><line x1="313.3333333333333" y1="265.88835551601215" x2="313.3333333333333" y2="209.88835551601215"></line><line x1="313.3333333333333" y1="209.88835551601215" x2="406.66666666666663" y2="278.8977291461932"></line><line x1="406.66666666666663" y1="278.8977291461932" x2="406.66666666666663" y2="222.89772914619323"></line><line x1="406.66666666666663" y1="222.89772914619323" x2="500" y2="287.16913596523807"></line><line x1="500" y1="287.16913596523807" x2="500" y2="231.16913596523807"></line><line x1="500" y1="287.16913596523807" x2="593.3333333333333" y2="234.09772914619322"></line><line x1="593.3333333333333" y1="290.0977291461932" x2="593.3333333333333" y2="234.09772914619322"></line><line x1="593.3333333333333" y1="290.0977291461932" x2="686.6666666666667" y2="232.28835551601213"></line><line x1="686.6666666666667" y1="288.28835551601213" x2="686.6666666666667" y2="232.28835551601213"></line><line x1="686.6666666666667" y1="288.28835551601213" x2="780" y2="227.55555555555554"></line><line x1="780" y1="283.55555555555554" x2="780" y2="227.55555555555554"></line></g><polyline points="220.0,194.0 313.3,209.9 406.7,222.9 500.0,231.2 593.3,234.1 686.7,232.3 780.0,227.6" fill="none" stroke="#c9661b" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></polyline><polyline points="220.0,250.0 313.3,265.9 406.7,278.9 500.0,287.2 593.3,290.1 686.7,288.3 780.0,283.6" fill="none" stroke="#c9661b" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></polyline><circle cx="220" cy="193.95555555555555" r="3.6" fill="#8a4410"></circle><circle cx="220" cy="249.95555555555555" r="3.6" fill="#8a4410"></circle><circle cx="313.3333333333333" cy="209.88835551601215" r="3.6" fill="#8a4410"></circle><circle cx="313.3333333333333" cy="265.88835551601215" r="3.6" fill="#8a4410"></circle><circle cx="406.66666666666663" cy="222.89772914619323" r="3.6" fill="#8a4410"></circle><circle cx="406.66666666666663" cy="278.8977291461932" r="3.6" fill="#8a4410"></circle><circle cx="500" cy="231.16913596523807" r="3.6" fill="#8a4410"></circle><circle cx="500" cy="287.16913596523807" r="3.6" fill="#8a4410"></circle><circle cx="593.3333333333333" cy="234.09772914619322" r="3.6" fill="#8a4410"></circle><circle cx="593.3333333333333" cy="290.0977291461932" r="3.6" fill="#8a4410"></circle><circle cx="686.6666666666667" cy="232.28835551601213" r="3.6" fill="#8a4410"></circle><circle cx="686.6666666666667" cy="288.28835551601213" r="3.6" fill="#8a4410"></circle><circle cx="780" cy="227.55555555555554" r="3.6" fill="#8a4410"></circle><circle cx="780" cy="283.55555555555554" r="3.6" fill="#8a4410"></circle><circle cx="220" cy="250.95555555555555" r="5" fill="#fff" stroke="#1f2a3d" stroke-width="2"></circle><circle cx="774" cy="286.55555555555554" r="3" fill="#fff" stroke="#1f2a3d" stroke-width="1.6"></circle><circle cx="786" cy="286.55555555555554" r="3" fill="#fff" stroke="#1f2a3d" stroke-width="1.6"></circle><line x1="220" y1="249.95555555555555" x2="780" y2="283.55555555555554" stroke="#2f6fde" stroke-width="1.5" stroke-dasharray="7 5" opacity="0.8"></line><line x1="530" y1="266.75555555555553" x2="530" y2="287.16913596523807" stroke="#d9443a" stroke-width="1.8"></line><polygon points="526,280.16913596523807 534,280.16913596523807 530,287.16913596523807" fill="#d9443a"></polygon><polygon points="526,273.75555555555553 534,273.75555555555553 530,266.75555555555553" fill="#d9443a"></polygon><line x1="504" y1="287.16913596523807" x2="536" y2="287.16913596523807" stroke="#d9443a" stroke-width="1"></line><g transform="translate(222.0,222.0) rotate(10.02)"><circle r="27" fill="none" stroke="#8cc63f" stroke-width="3" opacity="0.55"></circle><rect x="-19" y="-12" width="38" height="24" rx="6" fill="#2b3a55" stroke="#16213a" stroke-width="1.2"></rect><rect x="-13" y="-4.5" width="26" height="9" rx="4.5" fill="#c9f0ff"></rect><circle cx="-6.3" cy="0" r="3.3" fill="#fff" stroke="#7fb8cf" stroke-width="0.8"></circle><line x1="0" y1="-4.5" x2="0" y2="4.5" stroke="#7fb8cf" stroke-width="0.8"></line><circle cx="14" cy="-7.5" r="2.2" fill="#5be37d"></circle><text x="-17" y="-15" font-size="10" font-weight="700" fill="#2b3a55">Д1</text></g><g transform="translate(778.0,255.6) rotate(-3.24)"><circle r="27" fill="none" stroke="#8cc63f" stroke-width="3" opacity="0.55"></circle><rect x="-19" y="-12" width="38" height="24" rx="6" fill="#2b3a55" stroke="#16213a" stroke-width="1.2"></rect><rect x="-13" y="-4.5" width="26" height="9" rx="4.5" fill="#c9f0ff"></rect><circle cx="2.0" cy="0" r="3.3" fill="#fff" stroke="#7fb8cf" stroke-width="0.8"></circle><line x1="0" y1="-4.5" x2="0" y2="4.5" stroke="#7fb8cf" stroke-width="0.8"></line><circle cx="14" cy="-7.5" r="2.2" fill="#5be37d"></circle><text x="-17" y="-15" font-size="10" font-weight="700" fill="#2b3a55">Д2</text></g><line x1="202" y1="213.95555555555555" x2="190" y2="155.95555555555555" stroke="#2b3a55" stroke-width="1.4" stroke-dasharray="3 3"></line><rect x="20" y="111.95555555555555" width="170" height="44" rx="9" fill="#fff" stroke="#2b3a55" stroke-width="1.6" filter="url(#sd_sh)"></rect><text x="29" y="130.95555555555555" font-size="13" font-weight="700" fill="#2b3a55">Датчик Д1 (ферма)</text><text x="29" y="147.95555555555555" font-size="12.5" font-weight="400" fill="#1f2a3d">+0,253° · +4,42 мм/м</text><line x1="798" y1="247.55555555555554" x2="810" y2="189.55555555555554" stroke="#2b3a55" stroke-width="1.4" stroke-dasharray="3 3"></line><rect x="810" y="145.55555555555554" width="170" height="44" rx="9" fill="#fff" stroke="#2b3a55" stroke-width="1.6" filter="url(#sd_sh)"></rect><text x="819" y="164.55555555555554" font-size="13" font-weight="700" fill="#2b3a55">Датчик Д2 (ферма)</text><text x="819" y="181.55555555555554" font-size="12.5" font-weight="400" fill="#1f2a3d">−0,081° · −1,42 мм/м</text><rect x="132" y="554.9555555555555" width="176" height="22" rx="11" fill="#fff" stroke="#2f6fde" stroke-width="1.4" filter="url(#sd_sh)"></rect><text x="220" y="570.9555555555555" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1f2a3d">Опора A: осадка 8,0 мм</text><rect x="692" y="588.5555555555555" width="176" height="22" rx="11" fill="#fff" stroke="#2f6fde" stroke-width="1.4" filter="url(#sd_sh)"></rect><text x="780" y="604.5555555555555" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1f2a3d">Опора B: осадка 35,0 мм</text><line x1="160" y1="470" x2="280" y2="470" stroke="#2f6fde" stroke-width="1" stroke-dasharray="3 3"></line><line x1="720" y1="470" x2="840" y2="470" stroke="#2f6fde" stroke-width="1" stroke-dasharray="3 3"></line><line x1="500" y1="299.16913596523807" x2="500" y2="321.16913596523807" stroke="#d9443a" stroke-width="1.4" stroke-dasharray="3 3"></line><rect x="390" y="321.16913596523807" width="220" height="61" rx="9" fill="#fff" stroke="#d9443a" stroke-width="1.6" filter="url(#sd_sh)"></rect><text x="399" y="340.16913596523807" font-size="13" font-weight="700" fill="#d9443a">Прогиб f = 16,4 мм</text><text x="399" y="357.16913596523807" font-size="12.5" font-weight="400" fill="#1f2a3d">= L/1097  (предел СП: L/233)</text><text x="399" y="374.16913596523807" font-size="12.5" font-weight="400" fill="#1f2a3d">полное опускание центра: 37,9 мм</text><rect x="265" y="113.6222222222222" width="470" height="44" rx="10" fill="#fff" stroke="#c0533d" stroke-width="1.4" filter="url(#sd_sh)"></rect><text x="500" y="131.6222222222222" text-anchor="middle" font-size="13" font-weight="700" fill="#c0533d">Снег: q = 9,0 кН/м  (1,50 кПа × шаг 6,0 м)</text><text x="500" y="149.6222222222222" text-anchor="middle" font-size="12.5" fill="#1f2a3d">Поворот фермы целиком α = +0,086°   (Δs = s<tspan font-size="9" dy="3">B</tspan><tspan dy="-3"> − s</tspan><tspan font-size="9" dy="3">A</tspan><tspan dy="-3"> = +27,0 мм)</tspan></text><line x1="220" y1="456" x2="780" y2="456" stroke="#5d6b82" stroke-width="1"></line><line x1="220" y1="450" x2="220" y2="462" stroke="#5d6b82" stroke-width="1"></line><line x1="780" y1="450" x2="780" y2="462" stroke="#5d6b82" stroke-width="1"></line><rect x="454" y="446" width="92" height="20" rx="6" fill="#f3f9ff"></rect><text x="500" y="461" text-anchor="middle" font-size="13" fill="#5d6b82">L = 18,0 м</text><text x="12" y="632" font-size="12" fill="#ffffff" font-weight="600">Перемещения на рисунке увеличены в 40 раз; размеры конструкции — в масштабе</text></svg></div>
+        <div class="mob-i-block"><svg viewBox="0 0 420 470" aria-label="Интерактивная модель фермы на двух колоннах"><defs>
+    <linearGradient id="sm_sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9ecff"></stop><stop offset="1" stop-color="#f3f9ff"></stop></linearGradient>
+    <linearGradient id="sm_soil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9a77c"></stop><stop offset="1" stop-color="#a98559"></stop></linearGradient>
+    <linearGradient id="sm_col" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5b7598"></stop><stop offset=".5" stop-color="#7d97b8"></stop><stop offset="1" stop-color="#4f6789"></stop></linearGradient>
+    <linearGradient id="sm_conc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c7cbd1"></stop><stop offset="1" stop-color="#a9afb8"></stop></linearGradient>
+    <pattern id="sm_hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#9a7a50" stroke-width="2" opacity=".35"></line></pattern>
+    <filter id="sm_sh" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#1f2a3d" flood-opacity=".18"></feDropShadow></filter>
+  </defs><rect x="0" y="0" width="420" height="470" fill="url(#sm_sky)"></rect><g fill="#fff" opacity=".9" transform="scale(0.42,0.8)"><ellipse cx="120" cy="70" rx="46" ry="16"></ellipse><ellipse cx="150" cy="58" rx="30" ry="16"></ellipse><ellipse cx="860" cy="92" rx="52" ry="15"></ellipse><ellipse cx="890" cy="80" rx="28" ry="14"></ellipse></g><rect x="0" y="352" width="420" height="118" fill="url(#sm_soil)"></rect><rect x="0" y="352" width="420" height="118" fill="url(#sm_hatch)"></rect><rect x="0" y="348" width="420" height="8" rx="4" fill="#7cc36b"></rect><rect x="53.5" y="224" width="13" height="120.00000000000001" fill="none" stroke="#7d8aa0" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"></rect><rect x="353.5" y="224" width="13" height="120.00000000000001" fill="none" stroke="#7d8aa0" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"></rect><rect x="34" y="376" width="52" height="22" rx="5" fill="url(#sm_conc)" stroke="#8b929c" stroke-width="1.2"></rect><rect x="48" y="352" width="24" height="26" rx="3" fill="url(#sm_conc)" stroke="#8b929c" stroke-width="1.2"></rect><polygon points="53.5,352.0 66.5,352.0 66.5,232.0 53.5,232.0" fill="url(#sm_col)" stroke="#3b5272" stroke-width="1.4" stroke-linejoin="round"></polygon><line x1="60" y1="348" x2="60" y2="236" stroke="#3b5272" stroke-width="1" opacity="0.5"></line><rect x="47.5" y="347" width="25" height="6" rx="2" fill="#3b5272"></rect><rect x="46.5" y="226" width="27" height="7" rx="2" fill="#3b5272"></rect><rect x="334" y="403" width="52" height="22" rx="5" fill="url(#sm_conc)" stroke="#8b929c" stroke-width="1.2"></rect><rect x="348" y="379" width="24" height="26" rx="3" fill="url(#sm_conc)" stroke="#8b929c" stroke-width="1.2"></rect><polygon points="353.5,379.0 366.5,379.0 366.5,259.0 353.5,259.0" fill="url(#sm_col)" stroke="#3b5272" stroke-width="1.4" stroke-linejoin="round"></polygon><line x1="360" y1="375" x2="360" y2="263" stroke="#3b5272" stroke-width="1" opacity="0.5"></line><rect x="347.5" y="374" width="25" height="6" rx="2" fill="#3b5272"></rect><rect x="346.5" y="253" width="27" height="7" rx="2" fill="#3b5272"></rect><rect x="60" y="188" width="300" height="30.000000000000004" fill="none" stroke="#7d8aa0" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"></rect><path d="M 49.666666666666664,189.86614286243883 Q 45.666666666666664,178.9 59.666666666666664,176.4 L 60.0,179.5 L 110.0,192.3 L 160.0,202.8 L 210.0,209.4 L 260.0,211.8 L 310.0,210.3 L 360.0,206.5 L 360.3333333333333,204.9 Q 374.3333333333333,207.4 370.3333333333333,218.36614286243883 L 360.0,219.0 L 310.0,222.8 L 260.0,224.3 L 210.0,221.9 L 160.0,215.3 L 110.0,204.8 L 60.0,192.0 Z" fill="#ffffff" stroke="#b9d4ea" stroke-width="1.5" stroke-linejoin="round" filter="url(#sm_sh)"></path><g opacity="0.85"><circle class="flake" cx="74.3" cy="10" r="2.2" fill="#fff" style="--d:164px;animation-duration:3.8s;animation-delay:-0.37s"></circle><circle class="flake" cx="131.9" cy="10" r="2.8" fill="#fff" style="--d:170px;animation-duration:5.1s;animation-delay:-0.74s"></circle><circle class="flake" cx="189.4" cy="10" r="1.6" fill="#fff" style="--d:175px;animation-duration:6.4s;animation-delay:-1.1099999999999999s"></circle><circle class="flake" cx="247.0" cy="10" r="2.2" fill="#fff" style="--d:180px;animation-duration:3.7s;animation-delay:-1.48s"></circle><circle class="flake" cx="304.5" cy="10" r="2.8" fill="#fff" style="--d:185px;animation-duration:5s;animation-delay:-1.85s"></circle><circle class="flake" cx="362.0" cy="10" r="1.6" fill="#fff" style="--d:190px;animation-duration:6.3s;animation-delay:-2.2199999999999998s"></circle><circle class="flake" cx="90.7" cy="10" r="2.8" fill="#fff" style="--d:166px;animation-duration:4.9s;animation-delay:-2.96s"></circle><circle class="flake" cx="148.3" cy="10" r="1.6" fill="#fff" style="--d:171px;animation-duration:6.2s;animation-delay:-3.33s"></circle><circle class="flake" cx="205.8" cy="10" r="2.2" fill="#fff" style="--d:176px;animation-duration:3.5s;animation-delay:-3.7s"></circle><circle class="flake" cx="263.3" cy="10" r="2.8" fill="#fff" style="--d:181px;animation-duration:4.8s;animation-delay:-0.07000000000000028s"></circle><circle class="flake" cx="320.9" cy="10" r="1.6" fill="#fff" style="--d:187px;animation-duration:6.1s;animation-delay:-0.4399999999999995s"></circle><circle class="flake" cx="49.6" cy="10" r="2.8" fill="#fff" style="--d:162px;animation-duration:4.7s;animation-delay:-1.1799999999999997s"></circle><circle class="flake" cx="107.1" cy="10" r="1.6" fill="#fff" style="--d:167px;animation-duration:6s;animation-delay:-1.5499999999999998s"></circle><circle class="flake" cx="164.6" cy="10" r="2.2" fill="#fff" style="--d:173px;animation-duration:3.3s;animation-delay:-1.92s"></circle><circle class="flake" cx="222.2" cy="10" r="2.8" fill="#fff" style="--d:178px;animation-duration:4.6s;animation-delay:-2.29s"></circle><circle class="flake" cx="279.7" cy="10" r="1.6" fill="#fff" style="--d:183px;animation-duration:5.9s;animation-delay:-2.66s"></circle><circle class="flake" cx="337.3" cy="10" r="2.2" fill="#fff" style="--d:188px;animation-duration:3.2s;animation-delay:-3.0300000000000002s"></circle><circle class="flake" cx="65.9" cy="10" r="1.6" fill="#fff" style="--d:164px;animation-duration:5.8s;animation-delay:-3.7699999999999996s"></circle><circle class="flake" cx="123.5" cy="10" r="2.2" fill="#fff" style="--d:169px;animation-duration:3.1s;animation-delay:-0.14000000000000057s"></circle><circle class="flake" cx="181.0" cy="10" r="2.8" fill="#fff" style="--d:174px;animation-duration:4.4s;animation-delay:-0.5099999999999998s"></circle><circle class="flake" cx="238.6" cy="10" r="1.6" fill="#fff" style="--d:179px;animation-duration:5.7s;animation-delay:-0.879999999999999s"></circle><circle class="flake" cx="296.1" cy="10" r="2.2" fill="#fff" style="--d:184px;animation-duration:3s;animation-delay:-1.25s"></circle><circle class="flake" cx="353.6" cy="10" r="2.8" fill="#fff" style="--d:190px;animation-duration:4.3s;animation-delay:-1.6199999999999992s"></circle><circle class="flake" cx="82.3" cy="10" r="2.2" fill="#fff" style="--d:165px;animation-duration:2.9s;animation-delay:-2.3599999999999994s"></circle><circle class="flake" cx="139.9" cy="10" r="2.8" fill="#fff" style="--d:170px;animation-duration:4.2s;animation-delay:-2.7300000000000004s"></circle><circle class="flake" cx="197.4" cy="10" r="1.6" fill="#fff" style="--d:175px;animation-duration:5.5s;animation-delay:-3.0999999999999996s"></circle><circle class="flake" cx="254.9" cy="10" r="2.2" fill="#fff" style="--d:181px;animation-duration:2.8s;animation-delay:-3.4700000000000006s"></circle><circle class="flake" cx="312.5" cy="10" r="2.8" fill="#fff" style="--d:186px;animation-duration:4.1s;animation-delay:-3.84s"></circle><circle class="flake" cx="370.0" cy="10" r="1.6" fill="#fff" style="--d:191px;animation-duration:5.4s;animation-delay:-0.20999999999999908s"></circle></g><polyline points="51.7,188.9 60.0,192.0 110.0,204.8 160.0,215.3 210.0,221.9 260.0,224.3 310.0,222.8 360.0,219.0 368.3,217.4" fill="none" stroke="#c0533d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline><g stroke="#e08a2e" stroke-width="2.6" stroke-linecap="round"><line x1="60" y1="226" x2="60" y2="196"></line><line x1="60" y1="196" x2="110" y2="238.8031428253669"></line><line x1="110" y1="238.8031428253669" x2="110" y2="208.8031428253669"></line><line x1="110" y1="208.8031428253669" x2="160" y2="249.25710377819098"></line><line x1="160" y1="249.25710377819098" x2="160" y2="219.25710377819098"></line><line x1="160" y1="219.25710377819098" x2="210" y2="255.90376997206633"></line><line x1="210" y1="255.90376997206633" x2="210" y2="225.90376997206633"></line><line x1="210" y1="255.90376997206633" x2="260" y2="228.25710377819098"></line><line x1="260" y1="258.257103778191" x2="260" y2="228.25710377819098"></line><line x1="260" y1="258.257103778191" x2="310" y2="226.80314282536693"></line><line x1="310" y1="256.80314282536693" x2="310" y2="226.80314282536693"></line><line x1="310" y1="256.80314282536693" x2="360" y2="223"></line><line x1="360" y1="253" x2="360" y2="223"></line></g><polyline points="60.0,196.0 110.0,208.8 160.0,219.3 210.0,225.9 260.0,228.3 310.0,226.8 360.0,223.0" fill="none" stroke="#c9661b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline><polyline points="60.0,226.0 110.0,238.8 160.0,249.3 210.0,255.9 260.0,258.3 310.0,256.8 360.0,253.0" fill="none" stroke="#c9661b" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"></polyline><circle cx="60" cy="196" r="2.6" fill="#8a4410"></circle><circle cx="60" cy="226" r="2.6" fill="#8a4410"></circle><circle cx="110" cy="208.8031428253669" r="2.6" fill="#8a4410"></circle><circle cx="110" cy="238.8031428253669" r="2.6" fill="#8a4410"></circle><circle cx="160" cy="219.25710377819098" r="2.6" fill="#8a4410"></circle><circle cx="160" cy="249.25710377819098" r="2.6" fill="#8a4410"></circle><circle cx="210" cy="225.90376997206633" r="2.6" fill="#8a4410"></circle><circle cx="210" cy="255.90376997206633" r="2.6" fill="#8a4410"></circle><circle cx="260" cy="228.25710377819098" r="2.6" fill="#8a4410"></circle><circle cx="260" cy="258.257103778191" r="2.6" fill="#8a4410"></circle><circle cx="310" cy="226.80314282536693" r="2.6" fill="#8a4410"></circle><circle cx="310" cy="256.80314282536693" r="2.6" fill="#8a4410"></circle><circle cx="360" cy="223" r="2.6" fill="#8a4410"></circle><circle cx="360" cy="253" r="2.6" fill="#8a4410"></circle><circle cx="60" cy="227" r="5" fill="#fff" stroke="#1f2a3d" stroke-width="2"></circle><circle cx="354" cy="256" r="3" fill="#fff" stroke="#1f2a3d" stroke-width="1.6"></circle><circle cx="366" cy="256" r="3" fill="#fff" stroke="#1f2a3d" stroke-width="1.6"></circle><line x1="60" y1="226" x2="360" y2="253" stroke="#2f6fde" stroke-width="1.5" stroke-dasharray="7 5" opacity="0.8"></line><line x1="240" y1="239.5" x2="240" y2="255.90376997206633" stroke="#d9443a" stroke-width="1.8"></line><polygon points="236,248.90376997206633 244,248.90376997206633 240,255.90376997206633" fill="#d9443a"></polygon><polygon points="236,246.5 244,246.5 240,239.5" fill="#d9443a"></polygon><line x1="214" y1="255.90376997206633" x2="246" y2="255.90376997206633" stroke="#d9443a" stroke-width="1"></line><g transform="translate(62.0,211.0) rotate(14.84) scale(0.8)"><circle r="27" fill="none" stroke="#8cc63f" stroke-width="3" opacity="0.55"></circle><rect x="-19" y="-12" width="38" height="24" rx="6" fill="#2b3a55" stroke="#16213a" stroke-width="1.2"></rect><rect x="-13" y="-4.5" width="26" height="9" rx="4.5" fill="#c9f0ff"></rect><circle cx="-6.3" cy="0" r="3.3" fill="#fff" stroke="#7fb8cf" stroke-width="0.8"></circle><line x1="0" y1="-4.5" x2="0" y2="4.5" stroke="#7fb8cf" stroke-width="0.8"></line><circle cx="14" cy="-7.5" r="2.2" fill="#5be37d"></circle><text x="-17" y="-15" font-size="10" font-weight="700" fill="#2b3a55">Д1</text></g><g transform="translate(358.0,238.0) rotate(-4.86) scale(0.8)"><circle r="27" fill="none" stroke="#8cc63f" stroke-width="3" opacity="0.55"></circle><rect x="-19" y="-12" width="38" height="24" rx="6" fill="#2b3a55" stroke="#16213a" stroke-width="1.2"></rect><rect x="-13" y="-4.5" width="26" height="9" rx="4.5" fill="#c9f0ff"></rect><circle cx="2.0" cy="0" r="3.3" fill="#fff" stroke="#7fb8cf" stroke-width="0.8"></circle><line x1="0" y1="-4.5" x2="0" y2="4.5" stroke="#7fb8cf" stroke-width="0.8"></line><circle cx="14" cy="-7.5" r="2.2" fill="#5be37d"></circle><text x="-17" y="-15" font-size="10" font-weight="700" fill="#2b3a55">Д2</text></g><line x1="52" y1="197" x2="68" y2="102" stroke="#2b3a55" stroke-width="1.4" stroke-dasharray="3 3"></line><rect x="6" y="58" width="124" height="44" rx="9" fill="#fff" stroke="#2b3a55" stroke-width="1.6" filter="url(#sm_sh)"></rect><text x="15" y="77" font-size="13" font-weight="700" fill="#2b3a55">Датчик Д1</text><text x="15" y="94" font-size="12.5" font-weight="400" fill="#1f2a3d">+0,253°</text><line x1="368" y1="224" x2="352" y2="102" stroke="#2b3a55" stroke-width="1.4" stroke-dasharray="3 3"></line><rect x="290" y="58" width="124" height="44" rx="9" fill="#fff" stroke="#2b3a55" stroke-width="1.6" filter="url(#sm_sh)"></rect><text x="299" y="77" font-size="13" font-weight="700" fill="#2b3a55">Датчик Д2</text><text x="299" y="94" font-size="12.5" font-weight="400" fill="#1f2a3d">−0,081°</text><rect x="4" y="403" width="136" height="22" rx="11" fill="#fff" stroke="#2f6fde" stroke-width="1.4" filter="url(#sm_sh)"></rect><text x="72" y="419" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1f2a3d">A: осадка 8,0 мм</text><rect x="280" y="430" width="136" height="22" rx="11" fill="#fff" stroke="#2f6fde" stroke-width="1.4" filter="url(#sm_sh)"></rect><text x="348" y="446" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1f2a3d">B: осадка 35,0 мм</text><line x1="24" y1="344" x2="96" y2="344" stroke="#2f6fde" stroke-width="1" stroke-dasharray="3 3"></line><line x1="324" y1="344" x2="396" y2="344" stroke="#2f6fde" stroke-width="1" stroke-dasharray="3 3"></line><rect x="6" y="6" width="408" height="44" rx="10" fill="#fff" stroke="#c0533d" stroke-width="1.4" filter="url(#sm_sh)"></rect><text x="210" y="24" text-anchor="middle" font-size="13.5" font-weight="700" fill="#c0533d">Снег q = 9,0 кН/м</text><text x="210" y="42" text-anchor="middle" font-size="13" fill="#1f2a3d">Прогиб f = 16,4 мм   ·   Δs = +27,0 мм</text><rect x="248" y="238.70188498603318" width="72" height="19" rx="9" fill="#fff" stroke="#d9443a" stroke-width="1.2"></rect><text x="284" y="252.70188498603318" text-anchor="middle" font-size="12" font-weight="700" fill="#d9443a">f 16,4</text><text x="8" y="462" font-size="11" fill="#ffffff" font-weight="600">Перемещения увеличены ×60</text></svg></div>
+        <div class="nojs-msg"><b>Интерактив не запустился.</b> Похоже, страница открыта в режиме предпросмотра, где JavaScript отключён. Откройте её в браузере (Safari, Chrome): через «Поделиться → Открыть в Safari» или по ссылке на сайт.</div>
+      </div>
+      <div class="hint js-only">
+        <span><b>↕ фундамент</b>: осадка или подъём колонны</span>
+        <span><b>↓ центр фермы</b>: нагрузка (снег или груз)</span>
+      </div>
+      <div class="controls js-only">
+        <div class="ctl">Нагрузка:
+          <span class="seg" id="modeSeg">
+            <button data-mode="q" class="on"><span class="desk-only">Снег (равномерная q)</span><span class="mob-i">❄ Снег</span></button>
+            <button data-mode="P"><span class="desk-only">Сила P в центре</span><span class="mob-i">Груз в центре</span></button>
+          </span>
+        </div>
+        <div class="ctl" id="qCtl">q <input type="range" id="qR" min="0" max="60" step="0.1"> <span class="num" id="qV"></span></div>
+        <div class="ctl" id="pCtl" style="display:none">P <input type="range" id="pR" min="0" max="400" step="1"> <span class="num" id="pV"></span></div>
+        <div class="ctl desk-only">Увеличение перемещений на рисунке <input type="range" id="nR" min="15" max="100" step="1"> <span class="num" id="nV"></span></div>
+      </div>
+      <div class="ctl desk-only js-only" style="padding:0 14px 12px;flex-wrap:wrap">
+        Снеговой район (СП 20.13330):
+        <select id="region">
+          <option value="0.5">I — 0,5 кПа</option>
+          <option value="1.0">II — 1,0 кПа</option>
+          <option value="1.5" selected>III — 1,5 кПа (Москва)</option>
+          <option value="2.0">IV — 2,0 кПа</option>
+          <option value="2.5">V — 2,5 кПа</option>
+          <option value="3.0">VI — 3,0 кПа</option>
+          <option value="3.5">VII — 3,5 кПа</option>
+          <option value="4.0">VIII — 4,0 кПа</option>
+        </select>
+        <button class="btn" id="applySnow">❄ Насыпать снег по норме</button>
+      </div>
+      <div class="btns js-only">
+        <span class="note desk-only" style="align-self:center">Готовые сценарии:</span>
+        <button class="btn" data-sc="snow">Снег на кровле</button>
+        <button class="btn" data-sc="diff">Одна колонна осела</button>
+        <button class="btn" data-sc="equal">Обе осели одинаково</button>
+        <button class="btn desk-only" data-sc="all">Всё вместе</button>
+        <button class="btn" data-sc="reset">Сброс</button>
+      </div>
+      <details class="params desk-only js-only">
+        <summary>Параметры конструкции</summary>
+        <div class="pgrid">
+          <label>Пролёт фермы L, м <input type="number" id="pL" min="12" max="30" step="0.5"></label>
+          <label>Высота фермы h, м <input type="number" id="ph" min="1" max="3.5" step="0.05"></label>
+          <label>Верхний пояс A<sub>в</sub>, см² <input type="number" id="pAt" min="5" max="200" step="0.1"></label>
+          <label>Нижний пояс A<sub>н</sub>, см² <input type="number" id="pAb" min="5" max="200" step="0.1"></label>
+          <label>Модуль упругости E, МПа <input type="number" id="pE" min="1000" max="250000" step="1000"></label>
+          <label>Высота колонн H, м <input type="number" id="pH" min="3" max="18" step="0.1"></label>
+          <label>Шаг ферм B, м <input type="number" id="pB" min="3" max="12" step="0.5"></label>
+        </div>
+        <p class="note">По умолчанию: стальная ферма с параллельными поясами, верхний пояс 2∟100×8 (31,2 см²), нижний 2∟75×6 (17,56 см²), сталь E = 206 000 МПа. Ферма заменяется балкой с эквивалентным моментом инерции I = A<sub>в</sub>·A<sub>н</sub>/(A<sub>в</sub>+A<sub>н</sub>)·h². Сейчас <span id="eiInfo"></span>.</p>
+      </details>
+    </div>
+
+    <div class="card panel js-only" id="panel"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+// ---------- state ----------
+const DEF = {L:18, h:1.8, At:31.2, Ab:17.56, E:206000, H:7.2, B:6, mode:'q', q:0, P:0, sA:0, sB:0, N:40};
+const S = Object.assign({}, DEF);
+let touched = false;
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const deg = r => r*180/Math.PI;
+const rad = d => d*Math.PI/180;
+const clamp = (x,a,b) => Math.max(a, Math.min(b, x));
+function fmt(x, d=1, plus=false){
+  if (!isFinite(x)) return '—';
+  let v = Math.abs(x) < 0.5*Math.pow(10,-d) ? 0 : x;
+  let s = Math.abs(v).toFixed(d).replace('.', ',');
+  if (v < 0) return '−' + s;
+  if (plus && v > 0) return '+' + s;
+  return s;
+}
+const mm = m => fmt(m*1000, 1);
+
+// ---------- mechanics ----------
+function mech(){
+  const L=S.L, EI = S.E*1e6 * (S.At*S.Ab/(S.At+S.Ab))*1e-4 * S.h*S.h;
+  const q = S.q*1000, P = S.P*1000;
+  let f, th0, k;
+  if (S.mode==='q'){ f = 5*q*L**4/(384*EI); th0 = q*L**3/(24*EI); k = 5/16; }
+  else            { f = P*L**3/(48*EI);     th0 = P*L**2/(16*EI); k = 1/3; }
+  const alpha = (S.sB - S.sA)/L;           // +: по часовой (правый конец ниже)
+  const phi1 = alpha + th0, phi2 = alpha - th0;
+  // обратная задача "по датчикам"
+  const aC = (phi1+phi2)/2, tC = (phi1-phi2)/2;
+  const dsC = aC*L, fC = k*tC*L;
+  const loadC = S.mode==='q' ? 24*EI*tC/L**3/1000 : 16*EI*tC/L**2/1000;
+  const nLim = spN(L, S.H), fu = L/nLim;
+  return {L, EI, f, th0, k, alpha, phi1, phi2, aC, tC, dsC, fC, loadC, nLim, fu};
+}
+function vBend(x, L, EI){
+  if (S.mode==='q'){ const q=S.q*1000; return q*x*(L**3 - 2*L*x*x + x**3)/(24*EI); }
+  const P=S.P*1000, xx = x<=L/2 ? x : L-x;
+  return P*xx*(3*L*L - 4*xx*xx)/(48*EI);
+}
+// СП 20.13330.2016, табл. Д.1, п.2а; в скобках — при высоте помещения до 6 м
+function spN(L, Hroom){
+  const pts = Hroom <= 6 ? [[1,120],[3,150],[6,200],[12,250],[24,300]]
+                         : [[1,120],[3,150],[6,200],[24,250],[36,300]];
+  if (L <= pts[0][0]) return pts[0][1];
+  for (let i=1;i<pts.length;i++){
+    if (L <= pts[i][0]){
+      const [x0,y0]=pts[i-1],[x1,y1]=pts[i];
+      return y0 + (y1-y0)*(L-x0)/(x1-x0);
+    }
+  }
+  return pts[pts.length-1][1];
+}
+
+// ---------- geometry ----------
+// две компоновки рисунка: широкий экран и смартфон
+const LAYOUTS = {
+  desk:{W:1000, H:640, ground:478, span:560, colMax:235, mob:false, nMul:1,   sPx:70, vPx:170},
+  mob: {W:420,  H:470, ground:352, span:300, colMax:150, mob:true,  nMul:1.5, sPx:45, vPx:90}
+};
+let LAY = LAYOUTS.desk;
+const capH=7;
+const effN = () => Math.round(S.N*LAY.nMul);
+function geo(){
+  const scale = Math.min(LAY.span/S.L, LAY.colMax/S.H);   // px на метр
+  const xA = LAY.W/2 - S.L*scale/2, xB = xA + S.L*scale;
+  const groundY = LAY.ground, foundTop = groundY-8;
+  const colTop0 = foundTop - S.H*scale;
+  const k = effN()*scale;                                 // px на метр перемещения
+  return {scale, xA, xB, colTop0, k, groundY, foundTop, W:LAY.W, H:LAY.H, mob:LAY.mob};
+}
+
+// ---------- svg building ----------
+const svg = $('scene');
+function el(tag, attrs, inner=''){
+  let a=''; for (const k in attrs) a += ` ${k}="${attrs[k]}"`;
+  return `<${tag}${a}>${inner}</${tag}>`;
+}
+function pts(arr){ return arr.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' '); }
+
+function callout(x, y, ax, ay, lines, color, w=158){
+  const h = 10 + lines.length*17;
+  let s = el('line',{x1:ax,y1:ay,x2:x+(ax<x?0:(ax>x+w?w:w/2)),y2:y+(ay<y?0:(ay>y+h?h:h/2)),stroke:color,'stroke-width':1.4,'stroke-dasharray':'3 3'});
+  s += el('rect',{x, y, width:w, height:h, rx:9, fill:'#fff', stroke:color, 'stroke-width':1.6, filter:'url(#sh)'});
+  lines.forEach((t,i)=>{
+    s += el('text',{x:x+9, y:y+19+i*17, 'font-size':i===0?13:12.5, 'font-weight':i===0?700:400, fill:i===0?color:'#1f2a3d'}, t);
+  });
+  return s;
+}
+
+function sensor(x, y, angDeg, readingDeg, id){
+  const off = clamp(readingDeg/0.4*10, -10, 10);
+  return el('g',{transform:`translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${angDeg.toFixed(2)})${LAY.mob?' scale(0.8)':''}`},
+    el('circle',{r:27, fill:'none', stroke:'#8cc63f', 'stroke-width':3, opacity:.55}) +
+    el('rect',{x:-19,y:-12,width:38,height:24,rx:6,fill:'#2b3a55',stroke:'#16213a','stroke-width':1.2}) +
+    el('rect',{x:-13,y:-4.5,width:26,height:9,rx:4.5,fill:'#c9f0ff'}) +
+    el('circle',{cx:(-off).toFixed(1),cy:0,r:3.3,fill:'#fff',stroke:'#7fb8cf','stroke-width':.8}) +
+    el('line',{x1:0,y1:-4.5,x2:0,y2:4.5,stroke:'#7fb8cf','stroke-width':.8}) +
+    el('circle',{cx:14,cy:-7.5,r:2.2,fill:'#5be37d'}) +
+    el('text',{x:-17,y:-15,'font-size':10,'font-weight':700,fill:'#2b3a55'},id)
+  );
+}
+
+function handle(x, y, kind, icon, color='#2f6fde'){
+  const r = LAY.mob ? 15 : 13;
+  return el('g',{class:'h-handle','data-h':kind},
+    (touched?'':el('circle',{cx:x,cy:y,r:r+2,fill:color,class:'pulse'})) +
+    el('circle',{cx:x,cy:y,r:r,fill:'#fff',stroke:color,'stroke-width':2.5}) +
+    el('text',{x:x,y:y+5,'text-anchor':'middle','font-size':15,'font-weight':700,fill:color,'pointer-events':'none'},icon) +
+    el('circle',{cx:x,cy:y,r:LAY.mob?30:24,fill:'transparent'})   // увеличенная зона захвата
+  );
+}
+
+function arrowDown(x, y1, y2, color){
+  return el('line',{x1:x,y1:y1,x2:x,y2:y2-6,stroke:color,'stroke-width':2}) +
+         el('polygon',{points:`${x-5},${y2-8} ${x+5},${y2-8} ${x},${y2}`,fill:color});
+}
+
+// статичный фон
+const FLAKES = Array.from({length:34},(_,i)=>({x: 40+((i*137)%920), d: 2.5+((i*53)%40)/10, delay: -((i*0.37)%4), r: 1.6+((i*7)%3)*0.6}));
+
+function render(){
+  const M = mech(), G = geo();
+  const {scale, xA, xB, colTop0, k, groundY, foundTop, W, H, mob} = G;
+  const NV = effN();
+  const L=S.L, n = Math.max(4, Math.round(L/3/2)*2);
+  let s = '';
+
+  // defs
+  s += `<defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9ecff"/><stop offset="1" stop-color="#f3f9ff"/></linearGradient>
+    <linearGradient id="soil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9a77c"/><stop offset="1" stop-color="#a98559"/></linearGradient>
+    <linearGradient id="col" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5b7598"/><stop offset=".5" stop-color="#7d97b8"/><stop offset="1" stop-color="#4f6789"/></linearGradient>
+    <linearGradient id="conc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c7cbd1"/><stop offset="1" stop-color="#a9afb8"/></linearGradient>
+    <pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#9a7a50" stroke-width="2" opacity=".35"/></pattern>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#1f2a3d" flood-opacity=".18"/></filter>
+  </defs>`;
+  s += el('rect',{x:0,y:0,width:W,height:H,fill:'url(#sky)'});
+  // облака
+  s += `<g fill="#fff" opacity=".9" transform="scale(${W/1000},${mob?0.8:1})"><ellipse cx="120" cy="70" rx="46" ry="16"/><ellipse cx="150" cy="58" rx="30" ry="16"/><ellipse cx="860" cy="92" rx="52" ry="15"/><ellipse cx="890" cy="80" rx="28" ry="14"/></g>`;
+  // земля
+  s += el('rect',{x:0,y:groundY,width:W,height:H-groundY,fill:'url(#soil)'});
+  s += el('rect',{x:0,y:groundY,width:W,height:H-groundY,fill:'url(#hatch)'});
+  s += el('rect',{x:0,y:groundY-4,width:W,height:8,rx:4,fill:'#7cc36b'});
+
+  const anyDisp = Math.abs(S.sA)+Math.abs(S.sB)+M.f > 1e-6;
+
+  // ---------- фундаменты и колонны ----------
+  function column(side){
+    const x0 = side==='A'? xA : xB;
+    const sv = side==='A'? S.sA : S.sB;
+    const dy = sv*k;
+    const len = S.H*scale;
+    const base = [x0, foundTop+dy], top=[x0, foundTop+dy-len];
+    let g='';
+    // котлован/фундамент
+    const fw=mob?52:78, fh=mob?22:34, nw=mob?24:34, nh=mob?24:36;
+    g += el('rect',{x:x0-fw/2, y:foundTop+dy+nh, width:fw, height:fh, rx:5, fill:'url(#conc)', stroke:'#8b929c','stroke-width':1.2});
+    g += el('rect',{x:x0-nw/2, y:foundTop+dy, width:nw, height:nh+2, rx:3, fill:'url(#conc)', stroke:'#8b929c','stroke-width':1.2});
+    // колонна (параллелограмм)
+    const hw=mob?6.5:9;
+    g += el('polygon',{points:pts([[base[0]-hw,base[1]],[base[0]+hw,base[1]],[top[0]+hw,top[1]],[top[0]-hw,top[1]]]),fill:'url(#col)',stroke:'#3b5272','stroke-width':1.4,'stroke-linejoin':'round'});
+    g += el('line',{x1:base[0],y1:base[1]-4,x2:top[0],y2:top[1]+4,stroke:'#3b5272','stroke-width':1,opacity:.5});
+    // база колонны
+    g += el('rect',{x:base[0]-hw-6,y:base[1]-5,width:2*hw+12,height:6,rx:2,fill:'#3b5272'});
+    // оголовок
+    g += el('rect',{x:top[0]-hw-7,y:top[1]-capH+1,width:2*hw+14,height:capH,rx:2,fill:'#3b5272'});
+    return {g, base, top, len, dy, fdepth: nh+fh};
+  }
+  // призраки исходного положения
+  if (anyDisp){
+    const gp = (x)=> el('rect',{x:x-(mob?6.5:9),y:colTop0,width:mob?13:18,height:S.H*scale,fill:'none',stroke:'#7d8aa0','stroke-width':1,'stroke-dasharray':'4 4',opacity:.6});
+    s += gp(xA) + gp(xB);
+  }
+  const CA = column('A'), CB = column('B');
+  s += CA.g + CB.g;
+
+  // ---------- ферма ----------
+  const hp = S.h*scale;
+  const ybase = colTop0 - capH + 1;
+  const nodes = [];
+  for (let i=0;i<=n;i++){
+    const x = i*L/n;
+    const w = S.sA + (S.sB-S.sA)*x/L + vBend(x, L, M.EI);
+    const X = xA + x*scale, Y = ybase + w*k;
+    nodes.push({x, X, Yb:Y, Yt:Y-hp, w});
+  }
+  // призрак фермы
+  if (anyDisp){
+    s += el('rect',{x:xA,y:ybase-hp,width:L*scale,height:hp,fill:'none',stroke:'#7d8aa0','stroke-width':1,'stroke-dasharray':'4 4',opacity:.6});
+  }
+  // кровля
+  const over = 0.5*scale;
+  const roofTop = nodes.map(p=>[p.X, p.Yt-(mob?4:5)]);
+  const slope0 = (nodes[1].Yt-nodes[0].Yt)/(nodes[1].X-nodes[0].X);
+  const slopeN = (nodes[n].Yt-nodes[n-1].Yt)/(nodes[n].X-nodes[n-1].X);
+  const roofL = [nodes[0].X-over, nodes[0].Yt-5 - slope0*over];
+  const roofR = [nodes[n].X+over, nodes[n].Yt-5 + slopeN*over];
+  const roofLine = [roofL, ...roofTop, roofR];
+  // снег
+  const qDepthM = S.mode==='q' ? Math.min(3, (S.q/S.B)/2.0) : 0;   // плотность слежавшегося снега ≈ 2 кН/м³
+  const dpx = qDepthM*scale;
+  if (S.mode==='q' && S.q>0.05){
+    const top = roofLine.map(p=>[p[0], p[1]-dpx]);
+    const m = top.length-1;
+    let d = `M ${roofL[0]-2},${roofL[1]+1} `;
+    d += `Q ${roofL[0]-6},${(top[0][1]+dpx*0.2).toFixed(1)} ${top[0][0]+8},${top[0][1].toFixed(1)} `;
+    for (let i=1;i<m;i++) d += `L ${top[i][0].toFixed(1)},${top[i][1].toFixed(1)} `;
+    d += `L ${top[m][0]-8},${top[m][1].toFixed(1)} Q ${roofR[0]+6},${(top[m][1]+dpx*0.2).toFixed(1)} ${roofR[0]+2},${roofR[1]+1} `;
+    for (let i=m-1;i>=1;i--) d += `L ${roofLine[i][0].toFixed(1)},${roofLine[i][1].toFixed(1)} `;   // низ снега идёт по кровле
+    d += 'Z';
+    s += el('path',{d, fill:'#ffffff', stroke:'#b9d4ea','stroke-width':1.5,'stroke-linejoin':'round', filter:'url(#sh)'});
+    // падающие снежинки
+    const op = Math.min(1, 0.25 + S.q/15);
+    s += '<g opacity="'+op.toFixed(2)+'">';
+    FLAKES.forEach(fk=>{
+      const fx = fk.x*W/1000;
+      if (fx < roofL[0]-10 || fx > roofR[0]+10) return;
+      // высота кровли под снежинкой
+      const t = (fx - roofL[0])/(roofR[0]-roofL[0]);
+      const yRoof = roofL[1] + (roofR[1]-roofL[1])*t - dpx - 4;
+      s += `<circle class="flake" cx="${fx.toFixed(1)}" cy="10" r="${fk.r}" fill="#fff" style="--d:${Math.max(30,yRoof-10).toFixed(0)}px;animation-duration:${fk.d}s;animation-delay:${fk.delay}s"/>`;
+    });
+    s += '</g>';
+  }
+  s += el('polyline',{points:pts(roofLine),fill:'none',stroke:'#c0533d','stroke-width':mob?4:5,'stroke-linecap':'round','stroke-linejoin':'round'});
+
+  // стержни фермы
+  let lat='';
+  for (let i=0;i<=n;i++){
+    const p=nodes[i];
+    lat += el('line',{x1:p.X,y1:p.Yb,x2:p.X,y2:p.Yt});
+    if (i<n){
+      const q=nodes[i+1];
+      if (i < n/2) lat += el('line',{x1:p.X,y1:p.Yt,x2:q.X,y2:q.Yb});
+      else         lat += el('line',{x1:p.X,y1:p.Yb,x2:q.X,y2:q.Yt});
+    }
+  }
+  s += el('g',{stroke:'#e08a2e','stroke-width':mob?2.6:4,'stroke-linecap':'round'}, lat);
+  s += el('polyline',{points:pts(nodes.map(p=>[p.X,p.Yt])),fill:'none',stroke:'#c9661b','stroke-width':mob?5:7,'stroke-linecap':'round','stroke-linejoin':'round'});
+  s += el('polyline',{points:pts(nodes.map(p=>[p.X,p.Yb])),fill:'none',stroke:'#c9661b','stroke-width':mob?4.5:6,'stroke-linecap':'round','stroke-linejoin':'round'});
+  nodes.forEach(p=>{ s += el('circle',{cx:p.X,cy:p.Yt,r:mob?2.6:3.6,fill:'#8a4410'}) + el('circle',{cx:p.X,cy:p.Yb,r:mob?2.6:3.6,fill:'#8a4410'}); });
+
+  // опорные узлы: шарнир на A, каток на B
+  const nA=nodes[0], nB=nodes[n];
+  s += el('circle',{cx:nA.X,cy:nA.Yb+1,r:5,fill:'#fff',stroke:'#1f2a3d','stroke-width':2});
+  s += el('circle',{cx:nB.X-6,cy:nB.Yb+3,r:3,fill:'#fff',stroke:'#1f2a3d','stroke-width':1.6}) + el('circle',{cx:nB.X+6,cy:nB.Yb+3,r:3,fill:'#fff',stroke:'#1f2a3d','stroke-width':1.6});
+
+  // ---------- линия опор и прогиб ----------
+  const c = nodes[n/2];
+  const yChordC = (nA.Yb + nB.Yb)/2;
+  if (anyDisp){
+    s += el('line',{x1:nA.X,y1:nA.Yb,x2:nB.X,y2:nB.Yb,stroke:'#2f6fde','stroke-width':1.5,'stroke-dasharray':'7 5',opacity:.8});
+  }
+  if (c.Yb - yChordC > 5){
+    s += el('line',{x1:c.X+30,y1:yChordC,x2:c.X+30,y2:c.Yb,stroke:'#d9443a','stroke-width':1.8});
+    s += el('polygon',{points:`${c.X+26},${c.Yb-7} ${c.X+34},${c.Yb-7} ${c.X+30},${c.Yb}`,fill:'#d9443a'});
+    s += el('polygon',{points:`${c.X+26},${yChordC+7} ${c.X+34},${yChordC+7} ${c.X+30},${yChordC}`,fill:'#d9443a'});
+    s += el('line',{x1:c.X+4,y1:c.Yb,x2:c.X+36,y2:c.Yb,stroke:'#d9443a','stroke-width':1});
+  }
+
+  // ---------- нагрузка P ----------
+  let loadBottom = c.Yb;
+  if (S.mode==='P' && S.P>0.5){
+    const sz = mob ? 12 + Math.sqrt(S.P)*1.4 : 16 + Math.sqrt(S.P)*2.4;
+    const yW = c.Yb + (mob?18:26);
+    s += el('line',{x1:c.X,y1:c.Yb,x2:c.X,y2:yW,stroke:'#555','stroke-width':2});
+    s += el('path',{d:`M ${c.X-sz*0.42},${yW} L ${c.X+sz*0.42},${yW} L ${c.X+sz*0.6},${yW+sz} L ${c.X-sz*0.6},${yW+sz} Z`,fill:'#59606b',stroke:'#2d3138','stroke-width':1.5,'stroke-linejoin':'round'});
+    s += el('text',{x:c.X,y:yW+sz*0.62+4,'text-anchor':'middle','font-size':Math.min(16,8+sz*0.15),'font-weight':700,fill:'#fff'},'P');
+    loadBottom = yW+sz;
+  }
+
+  // ---------- датчики ----------
+  const vis = a => deg(Math.atan(a*NV));           // видимый (увеличенный) угол
+  const angA = vis(M.phi1), angB = vis(M.phi2);
+  const sA_x = nA.X + 2, sA_y = (nA.Yb+nA.Yt)/2;
+  const sB_x = nB.X - 2, sB_y = (nB.Yb+nB.Yt)/2;
+  s += sensor(sA_x, sA_y, angA, deg(M.phi1), 'Д1');
+  s += sensor(sB_x, sB_y, angB, deg(M.phi2), 'Д2');
+
+  // ---------- выноски ----------
+  if (!mob){
+    const R = (r)=> `${fmt(deg(r),3,true)}° · ${fmt(r*1000,2,true)} мм/м`;
+    const leftX = Math.max(8, xA - 200), rightX = Math.min(W-8-170, xB + 30);
+    s += callout(leftX, Math.max(8, sA_y-110), sA_x-20, sA_y-8, ['Датчик Д1 (ферма)', R(M.phi1)], '#2b3a55', 170);
+    s += callout(rightX, Math.max(8, sB_y-110), sB_x+20, sB_y-8, ['Датчик Д2 (ферма)', R(M.phi2)], '#2b3a55', 170);
+  } else {
+    const w = 124, y = 58;
+    s += callout(6, y, sA_x-10, sA_y-14, ['Датчик Д1', `${fmt(deg(M.phi1),3,true)}°`], '#2b3a55', w);
+    s += callout(W-6-w, y, sB_x+10, sB_y-14, ['Датчик Д2', `${fmt(deg(M.phi2),3,true)}°`], '#2b3a55', w);
+  }
+
+  // осадки: подписи под фундаментами
+  function settleLbl(x, sv, name, C){
+    const y = Math.min(H-14, foundTop + sv*k + C.fdepth + 20);
+    const word = sv > 0.00005 ? 'осадка' : (sv < -0.00005 ? 'подъём' : (mob?'0':'смещение'));
+    const t = mob ? (word==='0' ? `${name}: 0 мм` : `${name}: ${word} ${fmt(Math.abs(sv)*1000,1)} мм`)
+                  : `Опора ${name}: ${word} ${fmt(Math.abs(sv)*1000,1)} мм`;
+    const pw = mob ? 136 : 176;
+    x = clamp(x, pw/2+4, W-pw/2-4);
+    return el('rect',{x:x-pw/2,y:y-15,width:pw,height:22,rx:11,fill:'#fff',stroke:'#2f6fde','stroke-width':1.4,filter:'url(#sh)'}) +
+           el('text',{x:x,y:y+1,'text-anchor':'middle','font-size':12.5,'font-weight':600,fill:'#1f2a3d'},t);
+  }
+  s += settleLbl(xA, S.sA, 'A', CA) + settleLbl(xB, S.sB, 'B', CB);
+  // исходный уровень
+  if (Math.abs(S.sA)+Math.abs(S.sB) > 1e-6){
+    const gl = mob ? 36 : 60;
+    s += el('line',{x1:xA-gl,y1:foundTop,x2:xA+gl,y2:foundTop,stroke:'#2f6fde','stroke-width':1,'stroke-dasharray':'3 3'});
+    s += el('line',{x1:xB-gl,y1:foundTop,x2:xB+gl,y2:foundTop,stroke:'#2f6fde','stroke-width':1,'stroke-dasharray':'3 3'});
+  }
+
+  if (!mob){
+  // центр: прогиб и полное перемещение
+  {
+    const y0 = Math.max(loadBottom, c.Yb) + 34;
+    const lines = [`Прогиб f = ${mm(M.f)} мм`, `= L/${M.f>1e-7 ? Math.round(L/M.f) : '∞'}  (предел СП: L/${Math.round(M.nLim)})`, `полное опускание центра: ${mm(c.w)} мм`];
+    s += callout(c.X-110, Math.min(y0, foundTop-90), c.X, c.Yb+12, lines, '#d9443a', 220);
+  }
+
+  // нагрузка и поворот — над фермой
+  {
+    const topY = Math.min(nA.Yt, c.Yt, nB.Yt) - 5 - dpx;
+    let lbl;
+    if ((S.mode==='q' && S.q<0.05) || (S.mode==='P' && S.P<0.5)) lbl = 'Нагрузки нет: потяните центр фермы вниз ↓';
+    else if (S.mode==='q') lbl = `Снег: q = ${fmt(S.q,1)} кН/м  (${fmt(S.q/S.B,2)} кПа × шаг ${fmt(S.B,1)} м)`;
+    else lbl = `Сосредоточенная сила P = ${fmt(S.P,0)} кН`;
+    const y = Math.max(16, topY - 52);
+    s += el('rect',{x:c.X-235,y:y,width:470,height:44,rx:10,fill:'#fff',stroke:'#c0533d','stroke-width':1.4,filter:'url(#sh)'});
+    s += el('text',{x:c.X,y:y+18,'text-anchor':'middle','font-size':13,'font-weight':700,fill:'#c0533d'},lbl);
+    s += el('text',{x:c.X,y:y+36,'text-anchor':'middle','font-size':12.5,fill:'#1f2a3d'},
+      `Поворот фермы целиком α = ${fmt(deg(M.alpha),3,true)}°   (Δs = s<tspan font-size="9" dy="3">B</tspan><tspan dy="-3"> − s</tspan><tspan font-size="9" dy="3">A</tspan><tspan dy="-3"> = ${fmt((S.sB-S.sA)*1000,1,true)} мм)</tspan>`);
+  }
+
+  // размер L
+  {
+    const y = groundY - 22;
+    s += el('line',{x1:xA,y1:y,x2:xB,y2:y,stroke:'#5d6b82','stroke-width':1});
+    s += el('line',{x1:xA,y1:y-6,x2:xA,y2:y+6,stroke:'#5d6b82','stroke-width':1}) + el('line',{x1:xB,y1:y-6,x2:xB,y2:y+6,stroke:'#5d6b82','stroke-width':1});
+    s += el('rect',{x:W/2-46,y:y-10,width:92,height:20,rx:6,fill:'#f3f9ff'});
+    s += el('text',{x:W/2,y:y+5,'text-anchor':'middle','font-size':13,fill:'#5d6b82'},`L = ${fmt(L,1)} м`);
+  }
+
+  // масштаб
+  s += el('text',{x:12,y:632,'font-size':12,fill:'#ffffff','font-weight':600},`Перемещения на рисунке увеличены в ${NV} раз; размеры конструкции — в масштабе`);
+
+  } else {
+    // мобильная версия: сводка сверху и короткая подпись прогиба
+    const noLoad = (S.mode==='q' && S.q<0.05) || (S.mode==='P' && S.P<0.5);
+    const l1 = noLoad ? 'Нагрузки нет: потяните центр ↓' : (S.mode==='q' ? `Снег q = ${fmt(S.q,1)} кН/м` : `Груз P = ${fmt(S.P,0)} кН`);
+    const l2 = `Прогиб f = ${mm(M.f)} мм   ·   Δs = ${fmt((S.sB-S.sA)*1000,1,true)} мм`;
+    s += el('rect',{x:6,y:6,width:W-12,height:44,rx:10,fill:'#fff',stroke:'#c0533d','stroke-width':1.4,filter:'url(#sh)'});
+    s += el('text',{x:W/2,y:24,'text-anchor':'middle','font-size':13.5,'font-weight':700,fill:'#c0533d'},l1);
+    s += el('text',{x:W/2,y:42,'text-anchor':'middle','font-size':13,fill:'#1f2a3d'},l2);
+    if (c.Yb - yChordC > 5){
+      const ty = (yChordC + c.Yb)/2 + 4;
+      s += el('rect',{x:c.X+38,y:ty-13,width:72,height:19,rx:9,fill:'#fff',stroke:'#d9443a','stroke-width':1.2});
+      s += el('text',{x:c.X+74,y:ty+1,'text-anchor':'middle','font-size':12,'font-weight':700,fill:'#d9443a'},`f ${mm(M.f)}`);
+    }
+    s += el('text',{x:8,y:H-8,'font-size':11,fill:'#ffffff','font-weight':600},`Перемещения увеличены ×${NV}`);
+  }
+
+  // ручки
+  const ho = mob ? 46 : 58;
+  s += handle(CA.base[0]+ho, foundTop+CA.dy+(mob?14:20), 'sA', '↕');
+  s += handle(CB.base[0]-ho, foundTop+CB.dy+(mob?14:20), 'sB', '↕');
+  s += handle(c.X, c.Yb, 'load', '↓', '#d9443a');
+
+  svg.innerHTML = s;
+  renderPanel(M);
+  syncControls();
+}
+
+// ---------- panel ----------
+const F = (a,b)=>`<span class="frac"><span>${a}</span><span>${b}</span></span>`;
+function renderPanel(M){
+  if (LAY.mob) return renderPanelMobile(M);
+  const d = r => fmt(deg(r),3,true)+'°';
+  const loadName = S.mode==='q' ? 'q' : 'P';
+  const kTxt = S.mode==='q' ? F('5','16') : F('1','3');
+  const kNum = S.mode==='q' ? '0,3125' : '0,3333';
+  const fTheory = S.mode==='q'
+    ? `f = ${F('5 q L⁴','384 E I')}`
+    : `f = ${F('P L³','48 E I')}`;
+  const loadInv = S.mode==='q'
+    ? `q = ${F('24 E I θ','L³')} = <span class="num">${fmt(M.loadC,1)} кН/м</span>`
+    : `P = ${F('16 E I θ','L²')} = <span class="num">${fmt(M.loadC,0)} кН</span>`;
+  const ratio = M.f / M.fu;
+  const pct = clamp(ratio*100, 0, 100);
+  const barColor = ratio < 0.8 ? 'var(--ok)' : (ratio <= 1 ? 'var(--warn)' : 'var(--bad)');
+  const verdict = ratio <= 1 ? (ratio<0.8?'<span style="color:var(--ok);font-weight:700">Норма выполняется</span>':'<span style="color:var(--warn);font-weight:700">Близко к пределу</span>')
+                             : '<span style="color:var(--bad);font-weight:700">Прогиб больше допустимого!</span>';
+
+  let tip = '';
+  const sameSettle = Math.abs(S.sA) > 0.002 && Math.abs(S.sA - S.sB) < 0.0005 && M.th0 < 1e-6;
+  if (sameSettle) tip = `<div class="callout">Обе опоры сместились на ${fmt(S.sA*1000,1)} мм, но датчики Д1 и Д2 показывают ноль. <b>Наклономеры не видят равномерную осадку</b>, только разность осадок. Общую осадку измеряют нивелированием.</div>`;
+
+  $('panel').innerHTML = `
+  <h2>Что показывают датчики</h2>
+  <table class="readings">
+    <tr><td><span class="tag">Д1</span></td><td>ферма над опорой A</td><td class="v">φ₁ = <b>${d(M.phi1)}</b></td></tr>
+    <tr><td><span class="tag">Д2</span></td><td>ферма над опорой B</td><td class="v">φ₂ = <b>${d(M.phi2)}</b></td></tr>
+  </table>
+  <p class="note">Знак «+»: поворот по часовой стрелке (правый конец ниже). 1 мм/м = 0,001 рад ≈ 0,0573°.</p>
+  ${tip}
+
+  <h3>1. Два эффекта складываются</h3>
+  <p class="muted" style="margin:4px 0">Поворот фермы целиком (α) оба датчика видят <b>одинаково</b>. Изгиб от нагрузки поворачивает концы <b>в разные стороны</b> на угол θ.</p>
+  <div class="eq f"><div class="row">φ₁ = α + θ</div><div class="row">φ₂ = α − θ</div></div>
+
+  <h3>2. Поворот и разность осадок</h3>
+  <div class="eq f">
+    <div class="row">α = ${F('φ₁ + φ₂','2')} = ${F(d(M.phi1)+' + ('+d(M.phi2)+')','2')} = <span class="num">${d(M.aC)}</span></div>
+    <div class="row">Δs = α · L = ${fmt(M.aC*1000,3,true)}·10⁻³ · ${fmt(M.L,1)} м = <span class="num">${fmt(M.dsC*1000,1,true)} мм</span></div>
+    <div class="row muted" style="font-size:13px">на модели s<sub>B</sub> − s<sub>A</sub> = ${fmt((S.sB-S.sA)*1000,1,true)} мм <span class="check">✓</span></div>
+  </div>
+
+  <h3>3. Прогиб из угла поворота</h3>
+  <div class="eq f">
+    <div class="row">θ = ${F('φ₁ − φ₂','2')} = <span class="num">${d(M.tC)}</span> = ${fmt(M.tC*1000,3)}·10⁻³ рад</div>
+    <div class="row">f = k · θ · L,  k = ${kTxt} <span class="muted" style="font-size:13px">(${S.mode==='q'?'равномерная нагрузка':'сила в центре'})</span></div>
+    <div class="row">f = ${kNum} · ${fmt(M.tC*1000,3)}·10⁻³ · ${fmt(M.L*1000,0)} мм = <span class="num">${fmt(M.fC*1000,1)} мм</span></div>
+    <div class="row muted" style="font-size:13px">по сопромату ${fTheory} = ${fmt(M.f*1000,1)} мм <span class="check">✓</span></div>
+  </div>
+  <p class="muted" style="margin:4px 0">Бонус: зная жёсткость фермы EI, по углу θ можно оценить и саму нагрузку:</p>
+  <div class="eq f"><div class="row">${loadInv}</div></div>
+
+  <h3>4. Проверка по СП 20.13330.2016</h3>
+  <div style="font-size:14px">Допустимый прогиб: f<sub>u</sub> = L/${fmt(M.nLim,0)} = <b>${fmt(M.fu*1000,0)} мм</b> · сейчас f = <b>${fmt(M.f*1000,1)} мм</b> (${fmt(ratio*100,0)}%)</div>
+  <div class="bar"><i style="width:${pct}%;background:${barColor}"></i><b style="left:calc(80% - 1px);opacity:.25"></b></div>
+  <div style="font-size:14px">${verdict}</div>
+  <p class="note">Табл. Д.1, п. 2а: балки и фермы покрытий, открытых для обзора; промежуточные пролёты — по линейной интерполяции (здесь интерполируется знаменатель). При высоте помещения до 6 м действуют значения в скобках. Прогиб отсчитывается от линии, соединяющей опоры, то есть без учёта осадок. Именно его и дают датчики.</p>
+
+  <details class="more">
+    <summary>Откуда берутся k = 5/16 и k = 1/3</summary>
+    <p>Для балки на двух шарнирных опорах (сопротивление материалов, метод начальных параметров):</p>
+    <div class="eq f">
+      <div class="row">Равномерная q: f = ${F('5qL⁴','384EI')},  θ₀ = ${F('qL³','24EI')}  ⇒  ${F('f','θ₀')} = ${F('5','16')}L</div>
+      <div class="row">Сила P в центре: f = ${F('PL³','48EI')},  θ₀ = ${F('PL²','16EI')}  ⇒  ${F('f','θ₀')} = ${F('1','3')}L</div>
+    </div>
+    <p>Главное: в отношении f/θ₀ <b>сокращаются и нагрузка, и жёсткость EI</b>. Датчикам не нужно знать, сколько лежит снега и из чего сделана ферма. Достаточно измерить угол на опоре и знать пролёт и вид нагрузки.</p>
+  </details>
+  <details class="more">
+    <summary>Допущения модели</summary>
+    <ul>
+      <li>Ферма заменена балкой с эквивалентной жёсткостью EI (работают только пояса). Деформации решётки увеличивают реальный прогиб примерно на 10–20%. Датчики измеряют реальный угол, поэтому такой прогиб они увидят.</li>
+      <li>Нагрузка считается симметричной. При сильно неравномерном снеге (снеговой мешок у одного края) θ на концах различается, и для точной оценки нужны дополнительные датчики по длине.</li>
+      <li>Малые углы, упругая работа стали. Собственный вес не показан: датчики обнуляют после монтажа и дальше измеряют изменения.</li>
+      <li>Глубина снега нарисована приблизительно (плотность слежавшегося снега ≈ 200 кг/м³).</li>
+    </ul>
+  </details>
+  <p class="src">Формулы: сопротивление материалов, изгиб однопролётной шарнирной балки. Нормы: СП 20.13330.2016 «Нагрузки и воздействия», разд. 10 (снег), прил. Д, табл. Д.1 (предельные прогибы).</p>
+  `;
+}
+
+function renderPanelMobile(M){
+  const d = r => fmt(deg(r),3,true)+'°';
+  const ratio = M.f / M.fu, pct = clamp(ratio*100, 0, 100);
+  const barColor = ratio < 0.8 ? 'var(--ok)' : (ratio <= 1 ? 'var(--warn)' : 'var(--bad)');
+  const verdict = ratio <= 1 ? (ratio<0.8?'<span style="color:var(--ok);font-weight:700">Норма выполняется</span>':'<span style="color:var(--warn);font-weight:700">Близко к пределу</span>')
+                             : '<span style="color:var(--bad);font-weight:700">Больше допустимого!</span>';
+  const sameSettle = Math.abs(S.sA) > 0.002 && Math.abs(S.sA - S.sB) < 0.0005 && M.th0 < 1e-6;
+  const tip = sameSettle ? `<div class="callout">Обе опоры осели на ${fmt(S.sA*1000,1)} мм, а датчики показывают ноль: они видят только <b>разность</b> осадок.</div>` : '';
+  const k = S.mode==='q' ? F('5','16') : F('1','3');
+  $('panel').innerHTML = `
+  <h2>Показания датчиков</h2>
+  <table class="readings">
+    <tr><td><span class="tag">Д1</span></td><td>над опорой A</td><td class="v">φ₁ = <b>${d(M.phi1)}</b></td></tr>
+    <tr><td><span class="tag">Д2</span></td><td>над опорой B</td><td class="v">φ₂ = <b>${d(M.phi2)}</b></td></tr>
+  </table>
+  ${tip}
+  <h3>Как датчики считают</h3>
+  <div class="eq f">
+    <div class="row">Поворот: α = ${F('φ₁ + φ₂','2')} = <span class="num">${d(M.aC)}</span></div>
+    <div class="row">Разность осадок: Δs = α·L = <span class="num">${fmt(M.dsC*1000,1,true)} мм</span></div>
+  </div>
+  <div class="eq f">
+    <div class="row">Изгиб: θ = ${F('φ₁ − φ₂','2')} = <span class="num">${d(M.tC)}</span></div>
+    <div class="row">Прогиб: f = ${k}·θ·L = <span class="num">${fmt(M.fC*1000,1)} мм</span></div>
+  </div>
+  <h3>Норма СП</h3>
+  <div style="font-size:15px">f = <b>${fmt(M.f*1000,1)} мм</b> из допустимых ${fmt(M.fu*1000,0)} мм</div>
+  <div class="bar"><i style="width:${pct}%;background:${barColor}"></i></div>
+  <div style="font-size:15px">${verdict}</div>`;
+}
+
+// ---------- controls ----------
+function syncControls(){
+  $('qR').value = S.q; $('qV').textContent = fmt(S.q,1)+' кН/м';
+  $('pR').value = S.P; $('pV').textContent = fmt(S.P,0)+' кН';
+  $('nR').value = S.N; $('nV').textContent = '×'+S.N;
+  $('qCtl').style.display = S.mode==='q' ? '' : 'none';
+  $('pCtl').style.display = S.mode==='P' ? '' : 'none';
+  document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('on', b.dataset.mode===S.mode));
+  const M = mech();
+  $('eiInfo').textContent = `EI ≈ ${fmt(M.EI/1e3/1e3,0)}·10³ кН·м²`;
+}
+function syncParams(){
+  $('pL').value=S.L; $('ph').value=S.h; $('pAt').value=S.At; $('pAb').value=S.Ab; $('pE').value=S.E; $('pH').value=S.H; $('pB').value=S.B;
+}
+// ограничения перемещений — в пикселях рисунка, чтобы всё помещалось
+function limits(){
+  const G = geo();
+  return {
+    sMax: LAY.sPx/G.k,                 // осадка, м
+    vMax: LAY.vPx/G.k                  // прогиб, м
+  };
+}
+function clampState(){
+  const Lm = limits();
+  S.sA = clamp(S.sA,-Lm.sMax,Lm.sMax); S.sB = clamp(S.sB,-Lm.sMax,Lm.sMax);
+  S.q = clamp(S.q,0,60); S.P = clamp(S.P,0,400);
+}
+
+$('qR').addEventListener('input', e=>{ S.q=+e.target.value; touched=true; render(); });
+$('pR').addEventListener('input', e=>{ S.P=+e.target.value; touched=true; render(); });
+$('nR').addEventListener('input', e=>{ S.N=+e.target.value; clampState(); render(); });
+document.querySelectorAll('#modeSeg button').forEach(b=>b.addEventListener('click', ()=>{
+  if (S.mode===b.dataset.mode) return;
+  // переносим «такой же прогиб» на другой тип нагрузки
+  const M = mech();
+  S.mode = b.dataset.mode;
+  const EI=M.EI, L=S.L;
+  if (S.mode==='P') S.P = clamp(Math.round(M.f*48*EI/L**3/1000), 0, 400);
+  else S.q = clamp(+(M.f*384*EI/(5*L**4)/1000).toFixed(1), 0, 60);
+  render();
+}));
+$('applySnow').addEventListener('click', ()=>{ S.mode='q'; S.q = +(+$('region').value * S.B).toFixed(1); touched=true; render(); });
+document.querySelectorAll('[data-sc]').forEach(b=>b.addEventListener('click', ()=>{
+  const sc=b.dataset.sc; touched=true;
+  const keep = {L:S.L,h:S.h,At:S.At,Ab:S.Ab,E:S.E,H:S.H,B:S.B,N:S.N};
+  Object.assign(S, DEF, keep);
+  const sg = +$('region').value;
+  if (sc==='snow'){ S.mode='q'; S.q = +(sg*S.B).toFixed(1); }
+  if (sc==='diff'){ S.sB = 0.030; }
+  if (sc==='equal'){ S.sA = 0.030; S.sB = 0.030; }
+  if (sc==='all'){ S.mode='q'; S.q = +(sg*S.B).toFixed(1); S.sA=0.008; S.sB=0.035; }
+  clampState(); render();
+}));
+[['pL','L'],['ph','h'],['pAt','At'],['pAb','Ab'],['pE','E'],['pH','H'],['pB','B']].forEach(([id,key])=>{
+  $(id).addEventListener('change', e=>{
+    const v = parseFloat(String(e.target.value).replace(',', '.'));
+    const lo = +e.target.min, hi = +e.target.max;
+    if (isFinite(v)) S[key] = clamp(v, lo, hi);
+    syncParams(); clampState(); render();
+  });
+});
+
+// ---------- dragging ----------
+let drag = null;
+function svgPt(evt){
+  const p = svg.createSVGPoint(); p.x = evt.clientX; p.y = evt.clientY;
+  return p.matrixTransform(svg.getScreenCTM().inverse());
+}
+svg.addEventListener('pointerdown', e=>{
+  const h = e.target.closest('[data-h]');
+  if (!h) return;
+  e.preventDefault();
+  const p = svgPt(e);
+  drag = {kind:h.dataset.h, x0:p.x, y0:p.y, s:{...S}};
+  touched = true;
+});
+window.addEventListener('pointermove', e=>{
+  if (!drag) return;
+  e.preventDefault();
+  const p = svgPt(e), G = geo(), Lm = limits();
+  const dx = (p.x - drag.x0)/G.k, dy = (p.y - drag.y0)/G.k;      // в метрах «реального» перемещения
+  const s0 = drag.s;
+  if (drag.kind==='sA') S.sA = clamp(s0.sA + dy, -Lm.sMax, Lm.sMax);
+  if (drag.kind==='sB') S.sB = clamp(s0.sB + dy, -Lm.sMax, Lm.sMax);
+  if (drag.kind==='load'){
+    const M = mech();
+    // полное опускание центра от ручки → прогиб относительно опор → нагрузка
+    const wc0 = (s0.sA+s0.sB)/2 + (s0.mode==='q' ? 5*s0.q*1000*S.L**4/(384*M.EI) : s0.P*1000*S.L**3/(48*M.EI));
+    const fNew = clamp(wc0 + dy - (S.sA+S.sB)/2, 0, Lm.vMax);
+    if (S.mode==='q') S.q = clamp(Math.round(fNew*384*M.EI/(5*S.L**4)/100)/10, 0, 60);
+    else S.P = clamp(Math.round(fNew*48*M.EI/S.L**3/1000), 0, 400);
+  }
+  render();
+}, {passive:false});
+window.addEventListener('pointerup', ()=>{ drag=null; });
+window.addEventListener('pointercancel', ()=>{ drag=null; });
+
+function pickLayout(){
+  const next = window.innerWidth < 720 ? LAYOUTS.mob : LAYOUTS.desk;
+  if (next === LAY && svg.getAttribute('data-l')) return false;
+  LAY = next;
+  svg.setAttribute('viewBox', `0 0 ${LAY.W} ${LAY.H}`);
+  svg.setAttribute('data-l', LAY.mob ? 'mob' : 'desk');
+  clampState();
+  return true;
+}
+window.addEventListener('resize', ()=>{ if (pickLayout()) render(); });
+
+syncParams();
+pickLayout();
+render();
+})();
+</script>
+</body>
+</html>
